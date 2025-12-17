@@ -1,0 +1,73 @@
+name: Save Webcam Image
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # Ogni 30 minuti
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scarica immagine webcam
+        run: |
+          mkdir -p webcam
+          ts=$(date +"%Y-%m-%d_%H-%M")
+          img_url="https://www.lovevda.it/Media/LovevdaResp/Cache/Webcam/big_cogne.jpg"
+          img_path="webcam/webcam_${ts}.jpg"
+
+          echo "Scaricando immagine da $img_url"
+          curl -L -o "$img_path" "$img_url" || { echo "Errore nel download"; exit 1; }
+          echo "Immagine salvata in $img_path"
+
+      - name: Crea o aggiorna file ZIP mensile
+        run: |
+          zip_file="webcam_images_$(date +"%Y-%m").zip"
+          echo "zip_file=$zip_file" >> $GITHUB_ENV   # ↩️ rende il nome disponibile allo step successivo
+
+          echo "Verificando la cartella webcam..."
+          if [ "$(ls -A webcam)" ]; then
+            echo "Immagini trovate. Aggiorno: $zip_file"
+
+            # crea il file ZIP se non esiste
+            if [ ! -f "$zip_file" ]; then
+              zip -r "$zip_file" webcam/
+            else
+              # aggiunge solo nuovi file evitando di includere altri zip
+              zip -u "$zip_file" webcam/*.jpg
+            fi
+          else
+            echo "Nessuna immagine trovata da aggiungere."
+          fi
+
+      - name: Commit & Push ZIP aggiornato
+        run: |
+          echo "Configurazione Git..."
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+
+          zip_file="$zip_file"   # recupera dal GITHUB_ENV
+
+          if [ ! -f "$zip_file" ]; then
+            echo "Nessun file ZIP da aggiungere."
+            exit 0
+          fi
+
+          git add "$zip_file"
+
+          # controlla se ci sono cambiamenti da committare
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da commettere."
+            exit 0
+          else
+            echo "Modifiche trovate. Eseguo commit e push..."
+            git commit -m "Aggiornamento immagini webcam - mese $(date +"%Y-%m")"
+            git push
+          fi
