@@ -2,7 +2,7 @@ name: Save Webcam Image
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # Ogni 30 minuti
+    - cron: "*/60 * * * *"   # Ogni 60 minuti
   workflow_dispatch:
 
 permissions:
