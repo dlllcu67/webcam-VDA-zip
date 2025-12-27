@@ -1,8 +1,8 @@
-name: Save Cogne Webcam Images
+name: Save Webcam Image
 
 on:
   schedule:
-    - cron: "*/60 * * * *"   # Ogni 60 minuti
+    - cron: "*/60 * * * *" # Ogni 60 minuti
   workflow_dispatch:
 
 permissions:
@@ -16,16 +16,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Scarica immagine webcam Cogne
+      - name: Scarica immagine webcam
         run: |
           set -e
-          mkdir -p webcam_cogne
+          mkdir -p webcam
 
           ts=$(date +"%Y-%m-%d_%H-%M")
           img_url="https://www.lovevda.it/Media/LovevdaResp/Cache/Webcam/big_cogne.jpg"
-          img_path="webcam_cogne/webcam_${ts}.jpg"
+          img_path="webcam/webcam_${ts}.jpg"
 
-          echo "Scaricando $img_url"
+          echo "Scaricando immagine da $img_url"
           curl -L -o "$img_path" "$img_url"
           echo "Immagine salvata in $img_path"
 
@@ -34,12 +34,40 @@ jobs:
           set -e
 
           MONTH=$(date +"%Y-%m")
-          BASE_NAME="cogne_${MONTH}"
-          MAX_SIZE=$((95 * 1024 * 1024)) # 95 MB margine sicurezza
+          BASE_NAME="webcam_images_${MONTH}"
+          MAX_SIZE=$((90 * 1024 * 1024)) # 90 MB di margine
 
+          # trova ultimo ZIP del mese
           LAST_PART=$(ls ${BASE_NAME}_part*.zip 2>/dev/null | sort | tail -n 1)
 
           if [ -z "$LAST_PART" ]; then
             PART=1
             ZIP_FILE="${BASE_NAME}_part${PART}.zip"
-            echo "C
+            echo "Creo nuovo ZIP: $ZIP_FILE"
+            zip -r "$ZIP_FILE" webcam/
+          else
+            ZIP_SIZE=$(stat -c%s "$LAST_PART")
+
+            if [ "$ZIP_SIZE" -ge "$MAX_SIZE" ]; then
+              PART=$(echo "$LAST_PART" | sed -E 's/.*_part([0-9]+).zip/\1/')
+              PART=$((PART + 1))
+              ZIP_FILE="${BASE_NAME}_part${PART}.zip"
+              echo "ZIP pieno. Creo: $ZIP_FILE"
+              zip -r "$ZIP_FILE" webcam/
+            else
+              ZIP_FILE="$LAST_PART"
+              echo "Aggiorno ZIP esistente: $ZIP_FILE"
+              zip -u "$ZIP_FILE" webcam/*.jpg
+            fi
+          fi
+
+          echo "Operazione completata: $ZIP_FILE"
+
+      - name: Commit & push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .
+          git commit -m "Aggiornamento immagini webcam $(date +"%Y-%m-%d %H:%M")" || echo "Nessuna modifica da commitare"
+          git push
